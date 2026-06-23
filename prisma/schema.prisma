@@ -1,0 +1,196 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id            String    @id @default(cuid())
+  email         String    @unique
+  name          String?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  profile       Profile?
+  jobs          Job[]
+  applications  Application[]
+  documents     Document[]
+
+  accounts      Account[]
+  sessions      Session[]
+}
+
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String?
+  access_token      String?
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String?
+  session_state     String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
+}
+
+// Kandidaten-Profil (aus LinkedIn/Xing/CV extrahiert)
+model Profile {
+  id                 String   @id @default(cuid())
+  userId             String   @unique
+  user               User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  fullName           String?
+  headline           String?
+  summary            String?
+  location           String?
+  linkedinUrl        String?
+  xingUrl            String?
+  cvPdfUrl           String?
+  cvParsedJson       Json?
+
+  salaryMin          Int?
+  salaryMax          Int?
+  salaryNote         String?
+  workLocation       WorkLocationType?
+  securityNeed       SecurityNeedLevel?
+  companySizePrefs   String[]
+  industryPrefs      String[]
+  valuesNotes        String?
+  interviewCompleted Boolean  @default(false)
+  interviewData      Json?
+
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+}
+
+// Gefundene Stellenanzeigen
+model Job {
+  id              String        @id @default(cuid())
+  userId          String
+  user            User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  title           String
+  company         String
+  location        String?
+  remote          Boolean       @default(false)
+  salaryMin       Int?
+  salaryMax       Int?
+  description     String
+  url             String
+  source          String
+  postedAt        DateTime?
+  expiresAt       DateTime?
+
+  matchScore      Float?
+  matchReason     String?
+  status          JobStatus     @default(NEW)
+
+  application     Application?
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+}
+
+// Bewerbungsstatus pro Job
+model Application {
+  id              String            @id @default(cuid())
+  userId          String
+  user            User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  jobId           String            @unique
+  job             Job               @relation(fields: [jobId], references: [id], onDelete: Cascade)
+
+  status          ApplicationStatus @default(DRAFT)
+  appliedAt       DateTime?
+  followUpAt      DateTime?
+  notes           String?
+
+  documents       Document[]
+
+  createdAt       DateTime          @default(now())
+  updatedAt       DateTime          @updatedAt
+}
+
+// CV & Anschreiben pro Bewerbung
+model Document {
+  id              String       @id @default(cuid())
+  userId          String
+  user            User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  applicationId   String?
+  application     Application? @relation(fields: [applicationId], references: [id])
+
+  type            DocumentType
+  title           String
+  content         String?
+  pdfUrl          String?
+  generatedBy     String?
+
+  createdAt       DateTime     @default(now())
+  updatedAt       DateTime     @updatedAt
+}
+
+enum WorkLocationType {
+  ONSITE
+  HYBRID
+  REMOTE
+  FLEXIBLE
+}
+
+enum SecurityNeedLevel {
+  LOW
+  MEDIUM
+  HIGH
+  VERY_HIGH
+}
+
+enum JobStatus {
+  NEW
+  SAVED
+  IGNORED
+  APPLYING
+  APPLIED
+  INTERVIEW
+  OFFER
+  REJECTED
+  WITHDRAWN
+}
+
+enum ApplicationStatus {
+  DRAFT
+  SENT
+  ACKNOWLEDGED
+  INTERVIEW_SCHEDULED
+  OFFER_RECEIVED
+  ACCEPTED
+  REJECTED
+  WITHDRAWN
+}
+
+enum DocumentType {
+  CV_BASE
+  CV_TAILORED
+  COVER_LETTER
+}
