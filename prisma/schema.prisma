@@ -90,50 +90,61 @@ model Profile {
   updatedAt          DateTime @updatedAt
 }
 
-// Gefundene Stellenanzeigen
+// Gefundene / gespeicherte Stellenanzeigen
 model Job {
-  id              String        @id @default(cuid())
-  userId          String
-  user            User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id               String          @id @default(cuid())
+  userId           String
+  user             User            @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  title           String
-  company         String
-  location        String?
-  remote          Boolean       @default(false)
-  salaryMin       Int?
-  salaryMax       Int?
-  description     String
-  url             String
-  source          String
-  postedAt        DateTime?
-  expiresAt       DateTime?
+  title            String
+  company          String
+  location         String?
+  workMode         WorkLocationType?
+  employmentType   EmploymentType?  // FW = Freie Wirtschaft, ÖD = Öffentlicher Dienst
+  salaryMin        Int?
+  salaryMax        Int?
+  salaryRangeNote  String?          // Gehaltsrange aus der Anzeige als Freitext
+  description      String
+  url              String
+  referenceId      String?          // Vorgangsnummer des Arbeitgebers
+  source           String           // "stepstone", "linkedin", "xing", "manual", etc.
+  postedAt         DateTime?
+  expiresAt        DateTime?
 
-  matchScore      Float?
-  matchReason     String?
-  status          JobStatus     @default(NEW)
+  redFlags         String?          // "Haken" / Kommentar
+  matchScore       Float?           // 0-100, KI-Bewertung
+  matchReason      String?
 
-  application     Application?
-  createdAt       DateTime      @default(now())
-  updatedAt       DateTime      @updatedAt
+  status           JobStatus        @default(INTERESTING)
+
+  application      Application?
+  createdAt        DateTime         @default(now())
+  updatedAt        DateTime         @updatedAt
 }
 
-// Bewerbungsstatus pro Job
+// Bewerbungsstatus & Tracking pro Job
 model Application {
-  id              String            @id @default(cuid())
-  userId          String
-  user            User              @relation(fields: [userId], references: [id], onDelete: Cascade)
-  jobId           String            @unique
-  job             Job               @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  id               String            @id @default(cuid())
+  userId           String
+  user             User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  jobId            String            @unique
+  job              Job               @relation(fields: [jobId], references: [id], onDelete: Cascade)
 
-  status          ApplicationStatus @default(DRAFT)
-  appliedAt       DateTime?
-  followUpAt      DateTime?
-  notes           String?
+  status           ApplicationStatus @default(DRAFT)
+  salaryStated     String?           // Gehaltsvorstellung wie angegeben
+  appliedAt        DateTime?
+  responseAt       DateTime?         // Datum der ersten Rückmeldung
+  phoneCallAt      DateTime?         // Telefonat
+  interviewAt      DateTime?         // Gesprächstermin
+  followUpAt       DateTime?         // Nachhaken geplant
+  notes            String?
 
-  documents       Document[]
+  driveFolderUrl   String?           // Link zum Google Drive Ordner dieser Bewerbung
 
-  createdAt       DateTime          @default(now())
-  updatedAt       DateTime          @updatedAt
+  documents        Document[]
+
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime          @updatedAt
 }
 
 // Hochgeladene Quell-Dokumente (Zeugnisse, alte Anschreiben, Referenzen etc.)
@@ -160,9 +171,9 @@ model ProfileInconsistency {
   user         User                  @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   severity     InconsistencySeverity
-  source1      String                // z.B. "linkedin", "cv_pdf", "zeugnis_firma_x"
+  source1      String
   source2      String
-  field        String                // z.B. "job_title", "employment_dates", "gap"
+  field        String
   description  String
   resolved     Boolean               @default(false)
   resolvedNote String?
@@ -171,7 +182,7 @@ model ProfileInconsistency {
   updatedAt    DateTime              @updatedAt
 }
 
-// CV & Anschreiben pro Bewerbung
+// KI-generierte Dokumente pro Bewerbung
 model Document {
   id              String       @id @default(cuid())
   userId          String
@@ -183,7 +194,8 @@ model Document {
   title           String
   content         String?
   pdfUrl          String?
-  generatedBy     String?
+  driveFileUrl    String?      // optional: im Google Drive abgelegt
+  generatedBy     String?      // "sonnet" | "opus"
 
   createdAt       DateTime     @default(now())
   updatedAt       DateTime     @updatedAt
@@ -196,6 +208,11 @@ enum WorkLocationType {
   FLEXIBLE
 }
 
+enum EmploymentType {
+  FW   // Freie Wirtschaft
+  OD   // Öffentlicher Dienst
+}
+
 enum SecurityNeedLevel {
   LOW
   MEDIUM
@@ -203,22 +220,26 @@ enum SecurityNeedLevel {
   VERY_HIGH
 }
 
+// Workflow: INTERESTING → TO_APPLY → APPLYING → APPLIED → ...
 enum JobStatus {
-  NEW
-  SAVED
-  IGNORED
-  APPLYING
-  APPLIED
-  INTERVIEW
-  OFFER
-  REJECTED
-  WITHDRAWN
+  INTERESTING       // gefunden, noch nicht entschieden
+  TO_APPLY          // "noch zu bewerben" – aktiv in Pipeline
+  IGNORED           // aussortiert
+  APPLYING          // Dokumente werden erstellt
+  APPLIED           // abgeschickt
+  PHONE_CALL        // Telefonat vereinbart
+  INTERVIEW         // Gesprächstermin
+  OFFER             // Angebot erhalten
+  ACCEPTED          // angenommen
+  REJECTED          // abgelehnt
+  WITHDRAWN         // selbst zurückgezogen
 }
 
 enum ApplicationStatus {
   DRAFT
   SENT
   ACKNOWLEDGED
+  PHONE_CALL_SCHEDULED
   INTERVIEW_SCHEDULED
   OFFER_RECEIVED
   ACCEPTED
