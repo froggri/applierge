@@ -1,22 +1,49 @@
 import NextAuth from "next-auth";
-import Google from "next-auth/providers/google";
-import { PrismaAdapter } from "@auth/prisma-adapter";
+import Credentials from "next-auth/providers/credentials";
 import { prisma } from "@/lib/db";
 
 export const { handlers, auth, signIn, signOut } = NextAuth({
-  adapter: PrismaAdapter(prisma),
   providers: [
-    Google({
-      clientId: process.env.GOOGLE_CLIENT_ID!,
-      clientSecret: process.env.GOOGLE_CLIENT_SECRET!,
+    Credentials({
+      credentials: {
+        email: { label: "E-Mail", type: "email" },
+        password: { label: "Passwort", type: "password" },
+      },
+      async authorize(credentials) {
+        if (!credentials?.email || !credentials?.password) return null;
+
+        const validEmail = process.env.AUTH_EMAIL;
+        const validPassword = process.env.AUTH_PASSWORD;
+
+        if (
+          credentials.email !== validEmail ||
+          credentials.password !== validPassword
+        ) {
+          return null;
+        }
+
+        const user = await prisma.user.upsert({
+          where: { email: credentials.email as string },
+          update: {},
+          create: {
+            email: credentials.email as string,
+            name: "Philipp",
+          },
+        });
+
+        return { id: user.id, email: user.email, name: user.name };
+      },
     }),
   ],
-  pages: {
-    signIn: "/login",
-  },
+  session: { strategy: "jwt" },
+  pages: { signIn: "/login" },
   callbacks: {
-    session({ session, user }) {
-      session.user.id = user.id;
+    jwt({ token, user }) {
+      if (user?.id) token.userId = user.id;
+      return token;
+    },
+    session({ session, token }) {
+      if (token.userId) session.user.id = token.userId as string;
       return session;
     },
   },
